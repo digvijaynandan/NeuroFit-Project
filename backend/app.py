@@ -1,11 +1,10 @@
-import sys
 import os
+import sys
+import tempfile
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from pydub import AudioSegment  # ✅ convert formats
-import tempfile
 
-# Add project root to Python path
+# Add project root to Python path so ml_model imports work
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ml_model.whisper_mood_pipeline import process_audio_file
 
@@ -17,20 +16,25 @@ def analyze():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
-    file = request.files["file"]
+    audio_file = request.files["file"]
+    if audio_file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
 
-    # Save uploaded file temporarily
-    temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
-    file.save(temp_input.name)
+    _, ext = os.path.splitext(audio_file.filename)
+    if ext.lower() != ".wav":
+        return jsonify({"error": "Only WAV audio files are supported. Please upload a .wav file."}), 400
 
-    # ✅ Convert to WAV (16kHz mono) for Whisper
-    audio = AudioSegment.from_file(temp_input.name)
-    audio = audio.set_frame_rate(16000).set_channels(1)
-    wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-    audio.export(wav_path, format="wav")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_input:
+        temp_input.write(audio_file.read())
+        temp_path = temp_input.name
 
-    # Run through Whisper + sentiment
-    result = process_audio_file(wav_path)
+    try:
+        result = process_audio_file(temp_path)
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
 
     return jsonify(result)
 

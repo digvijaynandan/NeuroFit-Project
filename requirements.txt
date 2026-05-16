@@ -1,0 +1,9 @@
+Flask
+flask-cors
+openai-whisper
+transformers
+torch
+numpy
+soundfile
+streamlit
+requests
